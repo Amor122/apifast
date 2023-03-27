@@ -2,22 +2,55 @@ import hashlib
 import os
 
 import uvicorn
+from functools import lru_cache
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse, StreamingResponse, Response
+from pydantic import BaseSettings
+
+
+class Settings(BaseSettings):
+    app_name: str = "Awesome API"
+    admin_email: str
+    top_folder: str
+
+    class Config:
+        # 设置需要识别的 .env 文件
+        env_file = ".env"
+        # 设置字符编码
+        env_file_encoding = 'utf-8'
+
 
 app = FastAPI()
+
+
+@lru_cache()
+def get_settings():
+    return Settings()
+
+
+@app.get("/info")
+async def info(settings: Settings = Depends(get_settings)):
+    return {
+        "app_name": settings.app_name,
+        "admin_email": settings.admin_email,
+    }
+
 
 # 用于同步文件
 file_hash_dict = {}
 # 用于下载
 hash_file_dict = {}
+
+# 需要创建的文件
 empty_folders = []
 
 
 @app.on_event('startup')
 def init_data():
+    """初始化文件数据"""
     print('start')
+    print(get_settings().top_folder)
     get_path_files(r'D:\BaiduNetdiskDownload\02【高级】打造千万级流量秒杀系统_29讲带笔记')
 
 
@@ -28,7 +61,7 @@ async def root():
 
 @app.get("/file_data")
 async def get_file_data():
-    return file_hash_dict
+    return {'file_hash_dict': file_hash_dict, 'empty_folders': empty_folders}
 
 
 @app.get("/files/{hash_value}")
@@ -51,6 +84,7 @@ def calculate_sha256(filepath):
         return hash_value
 
 
+@lru_cache()
 def get_path_files(top_folder):
     """
     获得文件夹下所有文件的路径与空文件列表
@@ -74,10 +108,6 @@ def get_path_files(top_folder):
                 file_hash = calculate_sha256(file_full_name)
                 file_hash_dict.update({key_name: file_hash})
                 hash_file_dict.update({file_hash: file_full_name})
-    print(file_hash_dict)
-    print(hash_file_dict)
-
-
 
 
 if __name__ == '__main__':
